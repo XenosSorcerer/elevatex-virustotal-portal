@@ -1,0 +1,24 @@
+## Build and IDE Artifacts
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+*.userosscache
+*.sln.docstates
+
+## Database & Persistence
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+## Uploads & Temp Files
+uploads/
+temp/
+
+## Secrets & Local Overrides
+appsettings.Development.json
+appsettings.Local.json
+*.secrets.json

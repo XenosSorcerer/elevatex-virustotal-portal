@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ElevateX.Core/ElevateX.Core.csproj" />
+    <Project Path="src/ElevateX.Portal/ElevateX.Portal.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ElevateX.Tests/ElevateX.Tests.csproj" />
+  </Folder>
+</Solution>
