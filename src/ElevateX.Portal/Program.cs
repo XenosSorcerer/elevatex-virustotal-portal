@@ -1,4 +1,6 @@
 using ElevateX.Core.Data;
+using ElevateX.Core.Models;
+using ElevateX.Core.Services;
 using ElevateX.Portal.Components;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +16,17 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(connectionString));
+
+// Configure VirusTotal Options and HTTP Client
+builder.Services.Configure<VirusTotalOptions>(
+    builder.Configuration.GetSection(VirusTotalOptions.SectionName));
+
+builder.Services.AddHttpClient<IVirusTotalClient, VirusTotalClient>();
+
+// Core Services & In-Memory Queue
+builder.Services.AddSingleton<IScanQueue, InMemoryScanQueue>();
+builder.Services.AddScoped<ISubmissionService, SubmissionService>();
+builder.Services.AddScoped<IScanPipelineService, ScanPipelineService>();
 
 var app = builder.Build();
 

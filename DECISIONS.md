@@ -28,9 +28,17 @@
 
 
 
-
-
 2\. `SQLite` with `Entity Framework` — \*\*Local Persistence\*\*
 
 &#x20;  \* \*\*Why:\*\*  Zero-config first run (`dotnet run`); strong relational schema separating `Submission` events from `FileAnalysis` scan records (FR-08); expressive LINQ aggregations for dashboard metrics (FR-11).
+
+
+
+3\. "Hash-First Lookup" Two-Phase Pipeline - \*\*VirusTotal API Quota Optimization Strategy\*\*
+
+&#x20;  \* \*\*Why:\*\* Results in doing only 2-3 API requests per upload, conserving 50–75% of daily API quota (500/day) by avoiding unnecessary uploads and polling for already-scanned files. It also speeds up queue drainage significantly.
+
+
+
+
 
