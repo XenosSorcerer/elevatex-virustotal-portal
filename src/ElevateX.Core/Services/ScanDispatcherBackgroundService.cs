@@ -216,7 +216,7 @@ public class ScanDispatcherBackgroundService : BackgroundService
         return DispatchResult.Processed;
     }
 
-    private static bool IsTransient(HttpStatusCode? status) =>
+    internal static bool IsTransient(HttpStatusCode? status) =>
         status is null || Array.IndexOf(TransientStatusCodes, status.Value) >= 0;
 
     private enum DispatchResult
