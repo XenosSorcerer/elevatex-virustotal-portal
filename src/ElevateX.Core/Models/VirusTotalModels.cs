@@ -35,7 +35,18 @@ public class VirusTotalOptions
     public const string SectionName = "VirusTotal";
     public string ApiKey { get; set; } = string.Empty;
     public string BaseUrl { get; set; } = "https://www.virustotal.com/api/v3/";
+
+    /// <summary>Outbound request ceiling; the pacing interval is 60s / this value.</summary>
     public int RateLimitRequestsPerMinute { get; set; } = 4;
+
+    /// <summary>Hard stop for outbound calls per UTC day (free public tier = 500).</summary>
+    public int DailyRequestCap { get; set; } = 500;
+
+    /// <summary>Give up polling an unfinished analysis after this many attempts.</summary>
+    public int MaxPollAttempts { get; set; } = 20;
+
+    /// <summary>Bounded retries for transient failures before a submission lands in Failed.</summary>
+    public int MaxTransientRetries { get; set; } = 3;
 }
 
 // Internal JSON deserialization DTOs for VirusTotal API v3

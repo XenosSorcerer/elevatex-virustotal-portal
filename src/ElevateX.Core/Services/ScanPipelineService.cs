@@ -1,7 +1,9 @@
 using ElevateX.Core.Data;
 using ElevateX.Core.Entities;
+using ElevateX.Core.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ElevateX.Core.Services;
 
@@ -10,16 +12,19 @@ public class ScanPipelineService : IScanPipelineService
     private readonly AppDbContext _db;
     private readonly IVirusTotalClient _vtClient;
     private readonly ILogger<ScanPipelineService> _logger;
+    private readonly int _maxPollAttempts;
     private const long MaxStandardUploadBytes = 32 * 1024 * 1024; // 32 MB limit (FR-12)
 
     public ScanPipelineService(
         AppDbContext db,
         IVirusTotalClient vtClient,
-        ILogger<ScanPipelineService> logger)
+        ILogger<ScanPipelineService> logger,
+        IOptions<VirusTotalOptions> options)
     {
         _db = db;
         _vtClient = vtClient;
         _logger = logger;
+        _maxPollAttempts = Math.Max(1, options.Value.MaxPollAttempts);
     }
 
     public async Task ProcessScanAsync(Guid fileAnalysisId, CancellationToken cancellationToken = default)
@@ -135,9 +140,28 @@ public class ScanPipelineService : IScanPipelineService
             }
             else
             {
-                _logger.LogInformation("Analysis {AnalysisId} is still in progress on VirusTotal ({Status}).", 
-                    analysis.AnalysisId, analysisReport?.Status ?? "queued");
-                // Left in PollingAnalysis stage for subsequent poll pass
+                analysis.PollCount++;
+                analysis.LastScannedAtUtc = DateTime.UtcNow;
+
+                if (analysis.PollCount > _maxPollAttempts)
+                {
+                    analysis.Status = AnalysisStatus.Failed;
+                    analysis.CurrentStage = AnalysisStage.Failed;
+                    analysis.FailureReason =
+                        $"VirusTotal analysis did not complete after {_maxPollAttempts} polls.";
+                    _logger.LogWarning(
+                        "Analysis {AnalysisId} for {Sha256} abandoned after {Polls} polls.",
+                        analysis.AnalysisId, analysis.Sha256, analysis.PollCount);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Analysis {AnalysisId} still in progress on VirusTotal ({Status}). Poll {Poll}/{Max}.",
+                        analysis.AnalysisId, analysisReport?.Status ?? "queued", analysis.PollCount, _maxPollAttempts);
+                    // Left in PollingAnalysis stage for subsequent poll pass
+                }
+
+                await _db.SaveChangesAsync(cancellationToken);
             }
         }
     }

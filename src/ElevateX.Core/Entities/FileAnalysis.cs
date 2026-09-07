@@ -29,6 +29,7 @@ public class FileAnalysis
     public DateTime LastScannedAtUtc { get; set; } = DateTime.UtcNow;
 
     public int RetryCount { get; set; }
+    public int PollCount { get; set; }
     public string? FailureReason { get; set; }
 
     public ICollection<Submission> Submissions { get; set; } = new List<Submission>();

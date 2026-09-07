@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
 
     public DbSet<FileAnalysis> FileAnalyses => Set<FileAnalysis>();
     public DbSet<Submission> Submissions => Set<Submission>();
+    public DbSet<ApiCall> ApiCalls => Set<ApiCall>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -47,6 +48,15 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ThreatPriority).HasConversion<string>().HasMaxLength(30);
             entity.Property(e => e.ReasonForSuspicion).IsRequired().HasMaxLength(1000);
             entity.Property(e => e.TargetDepartment).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<ApiCall>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.OccurredAtUtc);
+
+            entity.Property(e => e.EndpointKind).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.Outcome).HasConversion<string>().HasMaxLength(20);
         });
     }
 }

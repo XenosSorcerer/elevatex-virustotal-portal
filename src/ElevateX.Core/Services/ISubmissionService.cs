@@ -24,5 +24,7 @@ public interface ISubmissionService
         CancellationToken cancellationToken = default);
 
     Task<List<Submission>> GetRecentSubmissionsAsync(int take = 50, CancellationToken cancellationToken = default);
+    Task<List<Submission>> GetSubmissionsPageAsync(int skip, int take, CancellationToken cancellationToken = default);
+    Task<int> GetSubmissionCountAsync(CancellationToken cancellationToken = default);
     Task<Submission?> GetSubmissionByIdAsync(Guid id, CancellationToken cancellationToken = default);
 }

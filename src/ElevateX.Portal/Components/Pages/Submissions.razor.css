@@ -1,0 +1,30 @@
+.detail-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 3rem 1rem;
+    z-index: 1050;
+}
+
+.detail-panel {
+    background: #fff;
+    border-radius: 0.5rem;
+    padding: 1.25rem 1.5rem;
+    width: 100%;
+    max-width: 640px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.detail-panel dt {
+    font-weight: 600;
+    color: #6c757d;
+}
+
+.detail-panel dd {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}

@@ -1,0 +1,291 @@
+@page "/submissions"
+@rendermode InteractiveServer
+@inject ISubmissionService SubmissionService
+@implements IAsyncDisposable
+
+<PageTitle>Submissions - ElevateX</PageTitle>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="h3 fw-bold mb-1"><i class="bi bi-list-check me-2 text-primary"></i>Submissions</h1>
+            <p class="text-muted mb-0">Every analyst submission and the status of its VirusTotal scan.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-success btn-sm" href="/export/submissions.xlsx">
+                <i class="bi bi-file-earmark-excel me-1"></i> Export .xlsx
+            </a>
+            <NavLink class="btn btn-outline-secondary btn-sm" href="">
+                <i class="bi bi-cloud-upload me-1"></i> Submit Sample
+            </NavLink>
+        </div>
+    </div>
+
+    @if (_loading && _rows.Count == 0)
+    {
+        <div class="text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading&hellip;</div>
+    }
+    else if (_rows.Count == 0)
+    {
+        <div class="alert alert-light border">
+            No submissions yet. <NavLink href="">Submit the first sample.</NavLink>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex align-items-center gap-3 mb-2 small text-muted">
+            <span class="badge rounded-pill bg-secondary">@_total total</span>
+            <span class="@(_autoRefresh ? "text-success" : "")">
+                <i class="bi bi-arrow-repeat me-1"></i>@(_autoRefresh ? "auto-refreshing" : "paused")
+                @if (_hasInFlight && _autoRefresh)
+                {
+                    <span>&middot; @_inFlightCount in flight</span>
+                }
+            </span>
+            <button class="btn btn-link btn-sm p-0 align-baseline" @onclick="ToggleAuto">
+                @(_autoRefresh ? "pause" : "resume")
+            </button>
+            <button class="btn btn-link btn-sm p-0 align-baseline" @onclick="() => ReloadAsync()">refresh now</button>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>File</th>
+                        <th>SHA-256</th>
+                        <th>Submitted (UTC)</th>
+                        <th>Source</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Detections</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in _rows)
+                    {
+                        var fa = s.FileAnalysis;
+                        <tr>
+                            <td class="text-break">@fa?.FileName</td>
+                            <td><code class="small">@ShortHash(fa?.Sha256)</code></td>
+                            <td class="small text-nowrap">@s.SubmittedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td class="small">@Humanize(s.Source)</td>
+                            <td>@((MarkupString)PriorityBadge(s.ThreatPriority))</td>
+                            <td>@((MarkupString)StatusBadge(fa?.Status))</td>
+                            <td>
+                                @if (fa?.Status == AnalysisStatus.Completed)
+                                {
+                                    <span class="@(fa.MaliciousCount > 0 ? "text-danger fw-bold" : "text-success")">
+                                        @fa.MaliciousCount / @fa.TotalEngines
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">&mdash;</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => _detail = s">
+                                    Details
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (_rows.Count < _total)
+        {
+            <button class="btn btn-outline-primary btn-sm" @onclick="LoadMore" disabled="@_loading">
+                Load more (@_rows.Count of @_total)
+            </button>
+        }
+    }
+</div>
+
+@if (_detail is not null)
+{
+    var fa = _detail.FileAnalysis;
+    <div class="detail-backdrop" @onclick="() => _detail = null">
+        <div class="detail-panel shadow-lg" @onclick:stopPropagation="true">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <h2 class="h5 fw-bold mb-0 text-break">@fa?.FileName</h2>
+                <button class="btn-close" @onclick="() => _detail = null" aria-label="Close"></button>
+            </div>
+            <dl class="row small mb-0">
+                <dt class="col-4">Status</dt>
+                <dd class="col-8">@((MarkupString)StatusBadge(fa?.Status))</dd>
+
+                <dt class="col-4">SHA-256</dt>
+                <dd class="col-8 text-break"><code>@fa?.Sha256</code></dd>
+
+                <dt class="col-4">Source</dt>
+                <dd class="col-8">@Humanize(_detail.Source)</dd>
+
+                <dt class="col-4">Priority</dt>
+                <dd class="col-8">@_detail.ThreatPriority</dd>
+
+                @if (!string.IsNullOrWhiteSpace(_detail.TargetDepartment))
+                {
+                    <dt class="col-4">Target</dt>
+                    <dd class="col-8">@_detail.TargetDepartment</dd>
+                }
+
+                <dt class="col-4">Reason</dt>
+                <dd class="col-8">@_detail.ReasonForSuspicion</dd>
+
+                <dt class="col-4">Submitted</dt>
+                <dd class="col-8">@_detail.SubmittedAtUtc.ToString("u")</dd>
+
+                @if (fa?.Status == AnalysisStatus.Completed)
+                {
+                    <dt class="col-4">Detections</dt>
+                    <dd class="col-8">
+                        <strong class="@(fa.MaliciousCount > 0 ? "text-danger" : "text-success")">@fa.MaliciousCount</strong>
+                        malicious, @fa.SuspiciousCount suspicious of @fa.TotalEngines engines
+                    </dd>
+
+                    <dt class="col-4">Summary</dt>
+                    <dd class="col-8">@fa.ScanSummary</dd>
+
+                    <dt class="col-4">Report</dt>
+                    <dd class="col-8">
+                        <a href="@fa.VirusTotalReportUrl" target="_blank" rel="noopener">
+                            Full VirusTotal report <i class="bi bi-box-arrow-up-right"></i>
+                        </a>
+                    </dd>
+                }
+
+                @if (fa?.Status == AnalysisStatus.Failed)
+                {
+                    <dt class="col-4">Failure</dt>
+                    <dd class="col-8 text-danger">@fa.FailureReason</dd>
+
+                    <dt class="col-4">Retries</dt>
+                    <dd class="col-8">@fa.RetryCount</dd>
+                }
+
+                <dt class="col-4">First scanned</dt>
+                <dd class="col-8">@fa?.FirstScannedAtUtc.ToString("u")</dd>
+
+                <dt class="col-4">Last scanned</dt>
+                <dd class="col-8">@fa?.LastScannedAtUtc.ToString("u")</dd>
+            </dl>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Submission> _rows = new();
+    private int _total;
+    private int _pageSize = 50;
+    private bool _loading = true;
+    private bool _autoRefresh = true;
+    private bool _hasInFlight;
+    private int _inFlightCount;
+    private Submission? _detail;
+
+    // Idle poll cadence; a little quicker while work is in flight.
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(4);
+
+    private PeriodicTimer? _timer;
+    private readonly CancellationTokenSource _cts = new();
+    private readonly SemaphoreSlim _dbLock = new(1, 1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        _ = RunAutoRefreshLoopAsync();
+    }
+
+    private async Task RunAutoRefreshLoopAsync()
+    {
+        _timer = new PeriodicTimer(PollInterval);
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            {
+                if (_autoRefresh && _detail is null)
+                {
+                    await ReloadAsync(silent: true);
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // component disposed
+        }
+    }
+
+    private async Task ReloadAsync(bool silent = false)
+    {
+        await _dbLock.WaitAsync(_cts.Token);
+        try
+        {
+            if (!silent) _loading = true;
+            _total = await SubmissionService.GetSubmissionCountAsync(_cts.Token);
+            _rows = await SubmissionService.GetSubmissionsPageAsync(0, _pageSize, _cts.Token);
+            _inFlightCount = _rows.Count(r => r.FileAnalysis is
+                { Status: AnalysisStatus.Queued or AnalysisStatus.InProgress });
+            _hasInFlight = _inFlightCount > 0;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _loading = false;
+            _dbLock.Release();
+        }
+    }
+
+    private async Task LoadMore()
+    {
+        _pageSize += 50;
+        await ReloadAsync();
+    }
+
+    private void ToggleAuto() => _autoRefresh = !_autoRefresh;
+
+    private static string ShortHash(string? hash) =>
+        string.IsNullOrEmpty(hash) ? "—" : hash[..Math.Min(12, hash.Length)] + "…";
+
+    private static string Humanize(SubmissionSource source) => source switch
+    {
+        SubmissionSource.EmailAttachment => "Email attachment",
+        SubmissionSource.UsbDrive => "USB drive",
+        SubmissionSource.WebDownload => "Web download",
+        SubmissionSource.NetworkShare => "Network share",
+        SubmissionSource.InternalServer => "Internal server",
+        _ => "Other"
+    };
+
+    private static string StatusBadge(AnalysisStatus? status) => status switch
+    {
+        AnalysisStatus.Queued => "<span class=\"badge bg-secondary\">Queued</span>",
+        AnalysisStatus.InProgress => "<span class=\"badge bg-info text-dark\">In Progress</span>",
+        AnalysisStatus.Completed => "<span class=\"badge bg-success\">Completed</span>",
+        AnalysisStatus.Failed => "<span class=\"badge bg-danger\">Failed</span>",
+        _ => "<span class=\"badge bg-light text-dark\">&mdash;</span>"
+    };
+
+    private static string PriorityBadge(ThreatPriority priority) => priority switch
+    {
+        ThreatPriority.Low => "<span class=\"badge bg-light text-dark\">Low</span>",
+        ThreatPriority.Medium => "<span class=\"badge bg-warning text-dark\">Medium</span>",
+        ThreatPriority.High => "<span class=\"badge bg-danger\">High</span>",
+        ThreatPriority.Critical => "<span class=\"badge bg-dark\">Critical</span>",
+        _ => "<span class=\"badge bg-light text-dark\">&mdash;</span>"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync();
+        _timer?.Dispose();
+        _cts.Dispose();
+        _dbLock.Dispose();
+    }
+}

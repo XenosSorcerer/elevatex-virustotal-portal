@@ -13,6 +13,8 @@ public class VirusTotalClient : IVirusTotalClient
     private readonly ILogger<VirusTotalClient> _logger;
     private readonly VirusTotalOptions _options;
 
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     public VirusTotalClient(
         HttpClient httpClient,
         IOptions<VirusTotalOptions> options,
@@ -48,10 +50,10 @@ public class VirusTotalClient : IVirusTotalClient
             return null;
         }
 
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response, cancellationToken);
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var parsed = JsonSerializer.Deserialize<VtResponse<VtFileData>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        var parsed = JsonSerializer.Deserialize<VtResponse<VtFileData>>(json, JsonOptions);
 
         if (parsed?.Data?.Attributes == null)
         {
@@ -85,10 +87,10 @@ public class VirusTotalClient : IVirusTotalClient
         content.Add(streamContent, "file", fileName);
 
         using var response = await _httpClient.PostAsync("files", content, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response, cancellationToken);
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var parsed = JsonSerializer.Deserialize<VtResponse<VtAnalysisData>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        var parsed = JsonSerializer.Deserialize<VtResponse<VtAnalysisData>>(json, JsonOptions);
 
         var analysisId = parsed?.Data?.Id;
         if (string.IsNullOrWhiteSpace(analysisId))
@@ -105,10 +107,10 @@ public class VirusTotalClient : IVirusTotalClient
         _logger.LogInformation("Polling VirusTotal analysis status for AnalysisId {AnalysisId}", analysisId);
 
         using var response = await _httpClient.GetAsync($"analyses/{analysisId}", cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response, cancellationToken);
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var parsed = JsonSerializer.Deserialize<VtResponse<VtAnalysisData>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        var parsed = JsonSerializer.Deserialize<VtResponse<VtAnalysisData>>(json, JsonOptions);
 
         if (parsed?.Data?.Attributes == null)
         {
@@ -128,5 +130,29 @@ public class VirusTotalClient : IVirusTotalClient
             UndetectedCount = stats.Undetected,
             HarmlessCount = stats.Harmless
         };
+    }
+
+    /// <summary>
+    /// Replaces <c>HttpResponseMessage.EnsureSuccessStatusCode()</c> so the status code and
+    /// any <c>Retry-After</c> hint survive into the retry policy as a typed exception.
+    /// </summary>
+    private static async Task EnsureSuccessOrThrowAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode) return;
+
+        var retryAfter = response.Headers.RetryAfter?.Delta
+            ?? (response.Headers.RetryAfter?.Date is { } date ? date - DateTimeOffset.UtcNow : (TimeSpan?)null);
+
+        string body = string.Empty;
+        try { body = await response.Content.ReadAsStringAsync(cancellationToken); }
+        catch { /* body is best-effort context only */ }
+
+        if (body.Length > 200) body = body[..200];
+
+        throw new VirusTotalApiException(
+            response.StatusCode,
+            retryAfter,
+            $"VirusTotal {response.RequestMessage?.Method} {response.RequestMessage?.RequestUri} " +
+            $"returned {(int)response.StatusCode} ({response.ReasonPhrase}). {body}".Trim());
     }
 }

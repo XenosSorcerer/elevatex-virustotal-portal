@@ -9,17 +9,14 @@ namespace ElevateX.Core.Services;
 public class SubmissionService : ISubmissionService
 {
     private readonly AppDbContext _db;
-    private readonly IScanQueue _scanQueue;
     private readonly ILogger<SubmissionService> _logger;
     private const long MaxStandardUploadBytes = 32 * 1024 * 1024; // 32 MB limit (FR-12)
 
     public SubmissionService(
         AppDbContext db,
-        IScanQueue scanQueue,
         ILogger<SubmissionService> logger)
     {
         _db = db;
-        _scanQueue = scanQueue;
         _logger = logger;
     }
 
@@ -136,11 +133,11 @@ public class SubmissionService : ISubmissionService
         _db.Submissions.Add(submission);
         await _db.SaveChangesAsync(cancellationToken);
 
-        // 4. Enqueue into background channel if scan is needed
+        // 4. No explicit enqueue: the FileAnalysis row is persisted as Queued and the
+        //    database-polled dispatcher (Gate 4 Option B) will pick it up.
         if (requiresScanning)
         {
-            await _scanQueue.EnqueueAsync(targetAnalysis.Id, cancellationToken);
-            _logger.LogInformation("Enqueued FileAnalysis {AnalysisId} for background processing.", targetAnalysis.Id);
+            _logger.LogInformation("FileAnalysis {AnalysisId} queued for background processing.", targetAnalysis.Id);
         }
 
         return new SubmissionResult
@@ -156,11 +153,26 @@ public class SubmissionService : ISubmissionService
     public async Task<List<Submission>> GetRecentSubmissionsAsync(int take = 50, CancellationToken cancellationToken = default)
     {
         return await _db.Submissions
+            .AsNoTracking()
             .Include(s => s.FileAnalysis)
             .OrderByDescending(s => s.SubmittedAtUtc)
             .Take(take)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<List<Submission>> GetSubmissionsPageAsync(int skip, int take, CancellationToken cancellationToken = default)
+    {
+        return await _db.Submissions
+            .AsNoTracking()
+            .Include(s => s.FileAnalysis)
+            .OrderByDescending(s => s.SubmittedAtUtc)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<int> GetSubmissionCountAsync(CancellationToken cancellationToken = default)
+        => _db.Submissions.CountAsync(cancellationToken);
 
     public async Task<Submission?> GetSubmissionByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
