@@ -1,0 +1,69 @@
+.row-label {
+    width: 92px;
+    flex: 0 0 92px;
+}
+
+.bar-track {
+    position: relative;
+    height: 16px;
+    background: #eef0f2;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    border-radius: 3px;
+}
+
+.bar-flagged {
+    background: #dc3545;
+}
+
+.status-queued {
+    background: #adb5bd;
+}
+
+.status-inprogress {
+    background: #0dcaf0;
+}
+
+.status-completed {
+    background: #198754;
+}
+
+.status-failed {
+    background: #dc3545;
+}
+
+.seg {
+    height: 100%;
+}
+
+.seg-clean {
+    background: #198754;
+}
+
+.seg-low {
+    background: #ffc107;
+}
+
+.seg-mid {
+    background: #fd7e14;
+}
+
+.seg-high {
+    background: #dc3545;
+}
+
+.dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 2px;
+}

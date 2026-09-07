@@ -36,6 +36,7 @@ builder.Services.AddScoped<ISubmissionService, SubmissionService>();
 builder.Services.AddScoped<IScanPipelineService, ScanPipelineService>();
 builder.Services.AddScoped<IQuotaGuard, QuotaGuard>();
 builder.Services.AddScoped<IExportService, ExportService>();
+builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 // Background scan dispatcher — database-polled outbox (Gate 4 Option B; FR-04, FR-05, FR-06, FR-10)
 builder.Services.AddHostedService<ScanDispatcherBackgroundService>();

@@ -1,0 +1,224 @@
+@page "/dashboard"
+@rendermode InteractiveServer
+@inject IAnalyticsService Analytics
+
+<PageTitle>Insights Dashboard - ElevateX</PageTitle>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="h3 fw-bold mb-1"><i class="bi bi-graph-up me-2 text-primary"></i>Insights Dashboard</h1>
+            <p class="text-muted mb-0">Submission volume, detection outcomes and API quota at a glance.</p>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="LoadAsync" disabled="@_loading">
+            <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+        </button>
+    </div>
+
+    @if (_snap is null)
+    {
+        <div class="text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading&hellip;</div>
+    }
+    else if (_snap.Kpis.TotalSubmissions == 0)
+    {
+        <div class="alert alert-light border">
+            No submissions yet. <NavLink href="">Submit a sample</NavLink> to populate the dashboard.
+        </div>
+    }
+    else
+    {
+        var k = _snap.Kpis;
+        var cards = new (string Label, string Value, string Cls)[]
+        {
+            ("Submissions", k.TotalSubmissions.ToString(), ""),
+            ("Distinct files", k.DistinctFiles.ToString(), ""),
+            ("Completed", k.Completed.ToString(), "text-success"),
+            ("Failed", k.Failed.ToString(), "text-danger"),
+            ("In flight", k.InFlight.ToString(), ""),
+            ("Dedup rate", $"{k.DedupRatePct}%", "")
+        };
+
+        <div class="row g-3 mb-4">
+            @foreach (var c in cards)
+            {
+                <div class="col-6 col-md-4 col-xl-2">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body py-3">
+                            <div class="text-muted small">@c.Label</div>
+                            <div class="fs-4 fw-bold @c.Cls">@c.Value</div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body">
+                        <h2 class="h6 fw-bold text-muted mb-3">Submissions &mdash; last @AnalyticsService.VolumeWindowDays days</h2>
+                        @{
+                            var vol = _snap.Volume;
+                            var vMax = Math.Max(1, vol.Max(d => d.Count));
+                            const int vW = 640, vH = 170, vPad = 24;
+                            var vBw = (double)vW / vol.Count;
+                            var bars = new System.Text.StringBuilder();
+                            for (var i = 0; i < vol.Count; i++)
+                            {
+                                var d = vol[i];
+                                var bh = (vH - vPad) * d.Count / (double)vMax;
+                                var cx = Inv(i * vBw + vBw / 2);
+                                bars.Append($"<rect x='{Inv(i * vBw + 3)}' y='{Inv(vH - vPad - bh)}' width='{Inv(vBw - 6)}' height='{Inv(bh)}' rx='2' fill='#0d6efd'/>");
+                                bars.Append($"<text x='{cx}' y='{vH - 7}' text-anchor='middle' font-size='9' fill='#adb5bd'>{d.Day.Day}</text>");
+                                if (d.Count > 0)
+                                {
+                                    bars.Append($"<text x='{cx}' y='{Inv(vH - vPad - bh - 3)}' text-anchor='middle' font-size='9' fill='#6c757d'>{d.Count}</text>");
+                                }
+                            }
+                        }
+                        <svg viewBox="0 0 @vW @vH" class="w-100" role="img" aria-label="Submissions per day">
+                            @((MarkupString)bars.ToString())
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body">
+                        <h2 class="h6 fw-bold text-muted mb-3">VirusTotal API quota</h2>
+                        @{
+                            var q = _snap.Quota;
+                            var dayPct = q.DailyCap == 0 ? 0 : Math.Min(100.0, 100.0 * q.UsedToday / q.DailyCap);
+                            var minPct = q.PerMinuteCap == 0 ? 0 : Math.Min(100.0, 100.0 * q.UsedLastMinute / q.PerMinuteCap);
+                            var dayCls = dayPct >= 90 ? "bg-danger" : dayPct >= 70 ? "bg-warning" : "bg-success";
+                        }
+                        <div class="d-flex justify-content-between small text-muted mb-1">
+                            <span>Today</span><span>@q.UsedToday / @q.DailyCap</span>
+                        </div>
+                        <div class="progress mb-3" style="height:14px">
+                            <div class="progress-bar @dayCls" style="width:@Inv(dayPct)%"></div>
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted mb-1">
+                            <span>Last minute</span><span>@q.UsedLastMinute / @q.PerMinuteCap</span>
+                        </div>
+                        <div class="progress" style="height:14px">
+                            <div class="progress-bar bg-info" style="width:@Inv(minPct)%"></div>
+                        </div>
+                        <p class="small text-muted mt-3 mb-0">
+                            Free tier: @q.PerMinuteCap req/min, @q.DailyCap req/day. Dispatch pauses at the daily cap
+                            and resumes at 00:00 UTC.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body">
+                        <h2 class="h6 fw-bold text-muted mb-3">Analysis status</h2>
+                        @{
+                            var stMax = Math.Max(1, _snap.StatusBreakdown.Max(s => s.Count));
+                        }
+                        @foreach (var s in _snap.StatusBreakdown)
+                        {
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="row-label small text-muted">@s.Status</span>
+                                <div class="flex-grow-1 mx-2 bar-track">
+                                    <div class="bar-fill status-@s.Status.ToLowerInvariant()"
+                                         style="width:@Inv(100.0 * s.Count / stMax)%"></div>
+                                </div>
+                                <span class="small fw-bold">@s.Count</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-body">
+                        <h2 class="h6 fw-bold text-muted mb-3">Top sources &amp; detections</h2>
+                        @if (_snap.TopSources.Count == 0)
+                        {
+                            <p class="text-muted small mb-0">No sources yet.</p>
+                        }
+                        else
+                        {
+                            var srcMax = Math.Max(1, _snap.TopSources.Max(s => s.Total));
+                            @foreach (var s in _snap.TopSources)
+                            {
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="row-label small text-muted">@Humanize(s.Source)</span>
+                                    <div class="flex-grow-1 mx-2 bar-track">
+                                        <div class="bar-fill bg-secondary" style="width:@Inv(100.0 * s.Total / srcMax)%"></div>
+                                        @if (s.Flagged > 0)
+                                        {
+                                            <div class="bar-fill bar-flagged" style="width:@Inv(100.0 * s.Flagged / srcMax)%"></div>
+                                        }
+                                    </div>
+                                    <span class="small fw-bold">
+                                        @s.Total@(s.Flagged > 0 ? $" ({s.Flagged})" : "")
+                                    </span>
+                                </div>
+                            }
+                            <p class="small text-muted mt-2 mb-0">Value in brackets = files flagged malicious by at least one engine.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body">
+                        <h2 class="h6 fw-bold text-muted mb-3">Detection severity &mdash; completed scans</h2>
+                        @{
+                            var det = _snap.Detections;
+                        }
+                        @if (det.Completed == 0)
+                        {
+                            <p class="text-muted small mb-0">No completed scans yet.</p>
+                        }
+                        else
+                        {
+                            var dtot = (double)det.Completed;
+                            <div class="d-flex bar-track" style="height:22px">
+                                <div class="seg seg-clean" style="width:@Inv(100.0 * det.Clean / dtot)%"></div>
+                                <div class="seg seg-low" style="width:@Inv(100.0 * det.Sev1to3 / dtot)%"></div>
+                                <div class="seg seg-mid" style="width:@Inv(100.0 * det.Sev4to10 / dtot)%"></div>
+                                <div class="seg seg-high" style="width:@Inv(100.0 * det.Sev10Plus / dtot)%"></div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-3 small text-muted mt-2">
+                                <span><span class="dot seg-clean"></span> Clean @det.Clean</span>
+                                <span><span class="dot seg-low"></span> 1&ndash;3 engines @det.Sev1to3</span>
+                                <span><span class="dot seg-mid"></span> 4&ndash;10 engines @det.Sev4to10</span>
+                                <span><span class="dot seg-high"></span> 10+ engines @det.Sev10Plus</span>
+                                <span class="ms-auto fw-bold">@det.Flagged of @det.Completed flagged</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private DashboardSnapshot? _snap;
+    private bool _loading;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try { _snap = await Analytics.GetSnapshotAsync(); }
+        finally { _loading = false; }
+    }
+
+    private static string Inv(double v) =>
+        v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Humanize(string pascal) =>
+        System.Text.RegularExpressions.Regex.Replace(pascal, "(?<=[a-z])([A-Z])", " $1");
+}
