@@ -23,10 +23,13 @@ builder.Services.Configure<VirusTotalOptions>(
 
 builder.Services.AddHttpClient<IVirusTotalClient, VirusTotalClient>();
 
-// Core Services & In-Memory Queue
+// Core Services
 builder.Services.AddSingleton<IScanQueue, InMemoryScanQueue>();
 builder.Services.AddScoped<ISubmissionService, SubmissionService>();
 builder.Services.AddScoped<IScanPipelineService, ScanPipelineService>();
+
+// Background Worker Service (FR-04, FR-05, FR-06, FR-10 - Option B Database-Polled Outbox)
+builder.Services.AddHostedService<ScanDispatcherBackgroundService>();
 
 var app = builder.Build();
 

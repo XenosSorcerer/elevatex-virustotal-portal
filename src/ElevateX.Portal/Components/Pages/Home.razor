@@ -1,7 +1,279 @@
-﻿@page "/"
+@page "/"
+@page "/submit"
+@rendermode InteractiveServer
+@inject ISubmissionService SubmissionService
+@inject NavigationManager Navigation
+@inject ILogger<Home> Logger
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Submit Suspicious Sample - ElevateX</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="container-fluid max-w-900 mx-auto">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="fw-bold mb-1"><i class="bi bi-shield-upload me-2 text-danger"></i>Submit Suspicious Sample</h3>
+            <p class="text-muted mb-0">Upload a suspicious file with forensic metadata for automated VirusTotal analysis.</p>
+        </div>
+        <div>
+            <NavLink class="btn btn-outline-secondary btn-sm" href="submissions">
+                <i class="bi bi-list-ul me-1"></i> View All Submissions
+            </NavLink>
+        </div>
+    </div>
 
-Welcome to your new app.
+    <!-- OpSec & Public Corpus Disclosure Banner (FR-01 / Brief §2) -->
+    <div class="alert alert-warning border-warning d-flex align-items-start shadow-sm mb-4" role="alert">
+        <i class="bi bi-exclamation-triangle-fill fs-4 me-3 text-warning"></i>
+        <div>
+            <h6 class="alert-heading fw-bold mb-1">Operational Security & Privacy Notice</h6>
+            <div class="small">
+                Files and hashes submitted to VirusTotal become part of its <strong>public research corpus</strong> and are accessible to global cybersecurity researchers.
+                <strong>Do not submit samples containing unredacted PII, passwords, private keys, or proprietary internal IP.</strong>
+            </div>
+        </div>
+    </div>
+
+    @if (_lastResult != null)
+    {
+        <div class="card border-success shadow-sm mb-4">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="bi bi-check-circle-fill me-2"></i>Sample Submitted Successfully</span>
+                <span class="badge bg-light text-dark">Status: @_lastResult.FileAnalysis.Status</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <strong>File Name:</strong> @_lastResult.FileAnalysis.FileName
+                    </div>
+                    <div class="col-md-6">
+                        <strong>File Size:</strong> @FormatBytes(_lastResult.FileAnalysis.FileSizeBytes)
+                    </div>
+                    <div class="col-12 text-break">
+                        <strong>SHA-256:</strong> <code class="user-select-all">@_lastResult.FileAnalysis.Sha256</code>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_lastResult.NoticeMessage))
+                {
+                    <div class="alert alert-info py-2 px-3 small mb-3">
+                        <i class="bi bi-info-circle-fill me-1"></i> @_lastResult.NoticeMessage
+                    </div>
+                }
+
+                @if (_lastResult.FileAnalysis.Status == AnalysisStatus.Completed)
+                {
+                    <div class="alert alert-secondary py-2 px-3 small mb-3">
+                        <strong>Verdict:</strong> @(_lastResult.FileAnalysis.ScanSummary ?? "Analysis complete.")
+                        @if (!string.IsNullOrWhiteSpace(_lastResult.FileAnalysis.VirusTotalReportUrl))
+                        {
+                            <a href="@_lastResult.FileAnalysis.VirusTotalReportUrl" target="_blank" class="ms-2 fw-bold text-decoration-none">
+                                View VirusTotal Report <i class="bi bi-box-arrow-up-right"></i>
+                            </a>
+                        }
+                    </div>
+                }
+
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-primary" @onclick="ResetForm">
+                        <i class="bi bi-plus-circle me-1"></i> Submit Another File
+                    </button>
+                    <NavLink class="btn btn-sm btn-primary" href="submissions">
+                        <i class="bi bi-arrow-right-circle me-1"></i> Track in Submissions History
+                    </NavLink>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-x-circle-fill me-2"></i><strong>Error:</strong> @_errorMessage
+            <button type="button" class="btn-close" @onclick="() => _errorMessage = null"></button>
+        </div>
+    }
+
+    <!-- Submission Form -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-4">
+            <EditForm Model="@_formModel" OnValidSubmit="HandleSubmitAsync">
+                <DataAnnotationsValidator />
+
+                <!-- File Picker / Dropzone -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Select File <span class="text-danger">*</span></label>
+                    <div class="border border-2 border-dashed rounded p-4 text-center bg-light">
+                        <InputFile OnChange="OnInputFileChange" class="form-control" id="fileUploadInput" />
+                        <div class="mt-2 text-muted small">
+                            Accepts any file type. (Standard VirusTotal public scan limit: 32 MB).
+                        </div>
+                        @if (_selectedFile != null)
+                        {
+                            <div class="mt-3 p-2 bg-white rounded border d-inline-block text-start">
+                                <i class="bi bi-file-earmark-binary text-primary me-2 fs-5"></i>
+                                <strong>@_selectedFile.Name</strong>
+                                <span class="badge bg-secondary ms-2">@FormatBytes(_selectedFile.Size)</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <!-- File Source (FR-01) -->
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Source of File <span class="text-danger">*</span></label>
+                        <InputSelect @bind-Value="_formModel.Source" class="form-select">
+                            <option value="@SubmissionSource.EmailAttachment">Email Attachment</option>
+                            <option value="@SubmissionSource.UsbDrive">USB Flash Drive</option>
+                            <option value="@SubmissionSource.WebDownload">Web / Browser Download</option>
+                            <option value="@SubmissionSource.NetworkShare">Internal Network Share</option>
+                            <option value="@SubmissionSource.InternalServer">Internal Server / Workstation</option>
+                            <option value="@SubmissionSource.Other">Other Source</option>
+                        </InputSelect>
+                        <div class="form-text">Where this suspicious artifact originated.</div>
+                    </div>
+
+                    <!-- Threat Priority (Extended Metadata) -->
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Triage Priority</label>
+                        <InputSelect @bind-Value="_formModel.ThreatPriority" class="form-select">
+                            <option value="@ThreatPriority.Low">Low - Informational / Baseline</option>
+                            <option value="@ThreatPriority.Medium">Medium - Suspicious Pattern</option>
+                            <option value="@ThreatPriority.High">High - Suspected Active Threat</option>
+                            <option value="@ThreatPriority.Critical">Critical - Active Compromise / Phish</option>
+                        </InputSelect>
+                        <div class="form-text">Operational urgency level for triage.</div>
+                    </div>
+
+                    <!-- Target Department / Affected User (Extended Metadata) -->
+                    <div class="col-md-12">
+                        <label class="form-label fw-bold">Target Department / Affected System</label>
+                        <InputText @bind-Value="_formModel.TargetDepartment" class="form-control" placeholder="e.g. Finance, Executive Office, Workstation WS-0492" />
+                        <div class="form-text">Optional forensic context indicating affected business unit or workstation.</div>
+                    </div>
+
+                    <!-- Reason for Suspicion (FR-01) -->
+                    <div class="col-12">
+                        <label class="form-label fw-bold">Reason for Suspicion <span class="text-danger">*</span></label>
+                        <InputTextArea @bind-Value="_formModel.ReasonForSuspicion" class="form-control" rows="3" 
+                            placeholder="Describe why this file was flagged (e.g. Macro-enabled document received from spoofed vendor address; unusual outbound network activity detected)." />
+                        <ValidationMessage For="@(() => _formModel.ReasonForSuspicion)" class="text-danger small" />
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="ResetForm" disabled="@_isSubmitting">
+                        Clear Form
+                    </button>
+                    <button type="submit" class="btn btn-danger px-4" disabled="@(_isSubmitting || _selectedFile == null)">
+                        @if (_isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Processing & Hashing...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-shield-lock-fill me-2"></i>
+                            <span>Submit for VirusTotal Analysis</span>
+                        }
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private SubmissionFormModel _formModel = new();
+    private IBrowserFile? _selectedFile;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+    private SubmissionResult? _lastResult;
+
+    private const long MaxFileSizeAllowed = 100 * 1024 * 1024; // 100 MB max stream buffer
+
+    private void OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+        _errorMessage = null;
+
+        if (_selectedFile.Size > MaxFileSizeAllowed)
+        {
+            _errorMessage = $"File size exceeds the 100 MB maximum platform limit. Selected size: {FormatBytes(_selectedFile.Size)}.";
+            _selectedFile = null;
+        }
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        if (_selectedFile == null)
+        {
+            _errorMessage = "Please select a file to submit.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_formModel.ReasonForSuspicion))
+        {
+            _errorMessage = "Please provide the reason for suspicion.";
+            return;
+        }
+
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        try
+        {
+            using var stream = _selectedFile.OpenReadStream(MaxFileSizeAllowed);
+
+            _lastResult = await SubmissionService.SubmitFileAsync(
+                stream,
+                _selectedFile.Name,
+                _selectedFile.Size,
+                _formModel.Source,
+                _formModel.ReasonForSuspicion,
+                _formModel.ThreatPriority,
+                _formModel.TargetDepartment);
+
+            // Reset form model on success
+            _formModel = new();
+            _selectedFile = null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to submit file.");
+            _errorMessage = $"Submission failed: {ex.Message}";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        _formModel = new();
+        _selectedFile = null;
+        _errorMessage = null;
+        _lastResult = null;
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] suffixes = { "B", "KB", "MB", "GB" };
+        int i = 0;
+        double dblBytes = bytes;
+        while (dblBytes >= 1024 && i < suffixes.Length - 1)
+        {
+            dblBytes /= 1024;
+            i++;
+        }
+        return $"{dblBytes:0.##} {suffixes[i]}";
+    }
+
+    public class SubmissionFormModel
+    {
+        public SubmissionSource Source { get; set; } = SubmissionSource.EmailAttachment;
+        public string ReasonForSuspicion { get; set; } = string.Empty;
+        public ThreatPriority ThreatPriority { get; set; } = ThreatPriority.Medium;
+        public string? TargetDepartment { get; set; }
+    }
+}
