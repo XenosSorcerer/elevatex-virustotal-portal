@@ -72,8 +72,10 @@ left untested and why.
 | Page | Route | |
 |---|---|---|
 | Submit Sample | `/` | Upload with source, reason for suspicion, priority, target department; OpSec warning that VirusTotal submissions join its public corpus |
-| Submissions | `/submissions` | Live-updating list — file, SHA-256, status, detection ratio; detail view with full VT report link; `.xlsx` export |
-| Insights Dashboard | `/dashboard` | Submission volume, analysis-status breakdown, top sources with flagged counts, detection severity, live API quota usage |
+| Submissions | `/submissions` | Instant push updates as scans progress — file, SHA-256, status, detection ratio; detail view with full VT report link; `.xlsx` export |
+| Insights Dashboard | `/dashboard` | Submission volume, analysis-status breakdown, top sources with flagged counts, detection severity, live API quota usage, a "new since last refresh" badge |
+
+A notification bell in the header (every page) surfaces recent warnings and errors live, with an unread-count badge — independent of which page you're on.
 
 ## Architecture, in brief
 
@@ -87,6 +89,10 @@ left untested and why.
   quota guard that pauses dispatch at the 500/day cap.
 - **Bounded retries** on transient failures only (429/408/5xx/timeout), honouring `Retry-After`;
   everything else fails fast with a reason.
+- **Real-time push** — an in-process notifier, riding Blazor Server's own SignalR circuit, publishes
+  scan-status changes from a single `AppDbContext.SaveChangesAsync` override; no polling required.
+- **Structured logging** — Serilog (console + rolling daily file), plus a live in-app notification
+  bell fed by a framework-agnostic error feed that captures warnings and errors as they happen.
 
 Full rationale, rejected alternatives, scale honesty, and AI-usage notes are in
 [`DECISIONS.md`](DECISIONS.md).
@@ -109,7 +115,9 @@ docs/                    the original assessment brief and this project's implem
 - Uploaded binaries are kept under `uploads/` (gitignored), keyed by SHA-256, with no automatic
   retention sweep.
 - Files over VirusTotal's 32 MB standard upload limit are hash-looked-up only, never uploaded.
-- `elevatex_portal.db*` and `uploads/` are gitignored; delete them locally to reset all state.
+- Logs are written to `logs/` (gitignored) as structured, daily-rolling files, in addition to the
+  console — no external log aggregator required, no new setup step.
+- `elevatex_portal.db*`, `uploads/`, and `logs/` are gitignored; delete them locally to reset all state.
 
 ## Favourite Punk / Emo / Hard-Rock band
 

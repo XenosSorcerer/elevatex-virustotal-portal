@@ -132,3 +132,35 @@
 
 &#x20;   \* \*\*Why:\*\* Covered the logic that would actually catch a regression — rate-limiter spacing, transient-vs-fatal retry classification, the scan state machine, SHA-256 deduplication, and one end-to-end upload-to-completed flow, all offline with a faked VirusTotal client. Deliberately skipped: Blazor markup (low regression value, churns on every UI tweak), the real VirusTotal HTTP contract (would break the offline requirement), ClosedXML's byte output and the SVG chart rendering (library/rendering boundaries), and the UTC-midnight quota reset (wall-clock dependent, and the counting logic itself is trivial and already covered).
 
+
+
+15\. Centralized `AppDbContext.SaveChangesAsync` override — \*\*Real-Time Push Without Touching Business Logic\*\*
+
+
+
+&#x20;   \* \*\*Why:\*\* Rather than adding a notify-call at each of the 9 separate `SaveChangesAsync` sites across the pipeline, dispatcher, and submission service, a single override on the DbContext detects Added/Modified `FileAnalysis` and `Submission` entries after a successful save and publishes one event per change. No existing service code changes, and no transition can be missed.
+
+
+
+16\. In-process notifier over a dedicated SignalR Hub — \*\*"SignalR" Real-Time Updates (FR-12)\*\*
+
+
+
+&#x20;   \* \*\*Why:\*\* Item 10 covered the original decision to poll; revisiting it for the FR-12 stand-out, Blazor Server's own render circuit already is a SignalR connection, so a singleton pub/sub service publishes on it instead of opening a second, redundant transport just to name-check the technology literally. Submissions now updates within about a second of a status change; the old 4-second `PeriodicTimer` survives only as a slowed-down (25s) resilience fallback, since in-process events wouldn't cross multiple app instances if this ever scaled out.
+
+
+
+17\. Framework-agnostic `ILoggerProvider` error feed, Serilog for the sinks — \*\*Structured Logging \& Error Notifications (FR-12)\*\*
+
+
+
+&#x20;   \* \*\*Why:\*\* A custom `ILoggerProvider` captures Warning-and-above entries into a bounded in-memory feed surfaced as a live bell/dropdown in the header, independent of which logging backend is active. Serilog supplies the structured console and rolling daily file output the brief asks for; every existing `ILogger<T>` call site needed zero changes since Serilog bridges `Microsoft.Extensions.Logging` transparently. Needed `writeToProviders: true` on `UseSerilog` for the error feed (and, briefly, a duplicate console logger) to actually receive events once Serilog owned the logger factory — fixed by clearing the default providers first.
+
+
+
+18\. Vendored Bootstrap Icons font/CSS, matching the existing Bootstrap vendoring — \*\*Fixing the Missing Icon Glyphs\*\*
+
+
+
+&#x20;   \* \*\*Why:\*\* Roughly 19 `bi-*` icon names were already used across every page, but the icon font itself was never added, so they rendered as blank space. Vendored the official static CSS+font files (v1.11.3, matching the already-vendored Bootstrap 5.3.3) under `wwwroot/lib/bootstrap-icons/` — the same no-npm, no-libman pattern already used for Bootstrap itself — fixing every icon with one new `<link>` tag and zero markup changes.
+
