@@ -1,6 +1,7 @@
 @page "/submissions"
 @rendermode InteractiveServer
 @inject ISubmissionService SubmissionService
+@inject IScanNotifier Notifier
 @implements IAsyncDisposable
 
 <PageTitle>Submissions - ElevateX</PageTitle>
@@ -186,9 +187,12 @@
     private bool _hasInFlight;
     private int _inFlightCount;
     private Submission? _detail;
+    private volatile bool _refreshPending;
 
-    // Idle poll cadence; a little quicker while work is in flight.
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(4);
+    // Resilience fallback only — real-time updates now come from IScanNotifier. This just bounds
+    // staleness if an in-process event were ever missed (e.g. a future multi-instance deployment,
+    // where in-process pub/sub wouldn't cross process boundaries).
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(25);
 
     private PeriodicTimer? _timer;
     private readonly CancellationTokenSource _cts = new();
@@ -197,6 +201,7 @@
     protected override async Task OnInitializedAsync()
     {
         await ReloadAsync();
+        Notifier.Changed += OnScanEvent;
         _ = RunAutoRefreshLoopAsync();
     }
 
@@ -220,9 +225,51 @@
         }
     }
 
+    // Fired from IScanNotifier — may run on a background dispatcher thread, not this component's
+    // circuit, so it must not touch UI state directly; it only kicks off a coalesced reload.
+    private void OnScanEvent(ScanEvent evt)
+    {
+        if (!_autoRefresh || _detail is not null) return;
+        _refreshPending = true;
+        _ = TryPushRefreshAsync();
+    }
+
+    private async Task TryPushRefreshAsync()
+    {
+        // Non-blocking try-acquire: if a reload is already in flight, that pass will loop and pick up
+        // this event's data too (see the while below) — no need to queue a second concurrent query.
+        if (!await _dbLock.WaitAsync(0, _cts.Token)) return;
+        try
+        {
+            while (_refreshPending)
+            {
+                _refreshPending = false;
+                await ReloadCoreAsync(silent: true);
+            }
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async Task ReloadAsync(bool silent = false)
     {
         await _dbLock.WaitAsync(_cts.Token);
+        try
+        {
+            await ReloadCoreAsync(silent);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private async Task ReloadCoreAsync(bool silent)
+    {
         try
         {
             if (!silent) _loading = true;
@@ -238,7 +285,6 @@
         finally
         {
             _loading = false;
-            _dbLock.Release();
         }
     }
 
@@ -283,6 +329,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        Notifier.Changed -= OnScanEvent;
         await _cts.CancelAsync();
         _timer?.Dispose();
         _cts.Dispose();

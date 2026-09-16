@@ -27,6 +27,9 @@ builder.Services.AddSingleton<IApiRateLimiter, ApiRateLimiter>();
 builder.Services.AddSingleton<IApiCallRecorder, ApiCallRecorder>();
 builder.Services.AddTransient<VirusTotalRateLimitHandler>();
 
+// In-process real-time push, riding Blazor Server's own SignalR circuit (FR-12)
+builder.Services.AddSingleton<IScanNotifier, ScanNotifier>();
+
 // Typed VirusTotal client; every outbound call is paced + logged by the handler
 builder.Services.AddHttpClient<IVirusTotalClient, VirusTotalClient>()
     .AddHttpMessageHandler<VirusTotalRateLimitHandler>();

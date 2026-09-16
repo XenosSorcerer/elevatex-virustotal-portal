@@ -1,6 +1,8 @@
 @page "/dashboard"
 @rendermode InteractiveServer
 @inject IAnalyticsService Analytics
+@inject IScanNotifier Notifier
+@implements IAsyncDisposable
 
 <PageTitle>Insights Dashboard - ElevateX</PageTitle>
 
@@ -10,9 +12,15 @@
             <h1 class="h3 fw-bold mb-1"><i class="bi bi-graph-up me-2 text-primary"></i>Insights Dashboard</h1>
             <p class="text-muted mb-0">Submission volume, detection outcomes and API quota at a glance.</p>
         </div>
-        <button class="btn btn-outline-secondary btn-sm" @onclick="LoadAsync" disabled="@_loading">
-            <i class="bi bi-arrow-clockwise me-1"></i> Refresh
-        </button>
+        <div class="d-flex align-items-center gap-2">
+            @if (_newEventCount > 0)
+            {
+                <span class="badge rounded-pill bg-info text-dark">@_newEventCount new</span>
+            }
+            <button class="btn btn-outline-secondary btn-sm" @onclick="LoadAsync" disabled="@_loading">
+                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+            </button>
+        </div>
     </div>
 
     @if (_snap is null)
@@ -206,14 +214,31 @@
 @code {
     private DashboardSnapshot? _snap;
     private bool _loading;
+    private int _newEventCount;
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        Notifier.Changed += OnScanEvent;
+    }
 
     private async Task LoadAsync()
     {
         _loading = true;
-        try { _snap = await Analytics.GetSnapshotAsync(); }
+        try
+        {
+            _snap = await Analytics.GetSnapshotAsync();
+            _newEventCount = 0;
+        }
         finally { _loading = false; }
+    }
+
+    // Deliberately does NOT re-run the aggregation query — just counts arrivals so a burst of scans
+    // doesn't re-trigger GetSnapshotAsync dozens of times. The user clicks Refresh when ready.
+    private void OnScanEvent(ScanEvent evt)
+    {
+        _newEventCount++;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private static string Inv(double v) =>
@@ -221,4 +246,10 @@
 
     private static string Humanize(string pascal) =>
         System.Text.RegularExpressions.Regex.Replace(pascal, "(?<=[a-z])([A-Z])", " $1");
+
+    public ValueTask DisposeAsync()
+    {
+        Notifier.Changed -= OnScanEvent;
+        return ValueTask.CompletedTask;
+    }
 }
