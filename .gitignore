@@ -18,6 +18,9 @@ obj/
 uploads/
 temp/
 
+## Structured logs (Serilog rolling files)
+logs/
+
 ## Secrets & Local Overrides
 appsettings.Development.json
 appsettings.Local.json

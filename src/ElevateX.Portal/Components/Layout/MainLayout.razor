@@ -1,4 +1,7 @@
+@using Microsoft.Extensions.Logging
 @inherits LayoutComponentBase
+@inject IErrorFeedService ErrorFeed
+@implements IAsyncDisposable
 
 <div class="page">
     <div class="sidebar">
@@ -11,9 +14,52 @@
                 <span class="badge bg-secondary">Internal Threat Intelligence</span>
                 <span class="badge bg-dark">VT Public API Tier: 4 req/min (Paced)</span>
             </div>
-            <div class="d-flex align-items-center gap-2 text-muted small">
+            <div class="d-flex align-items-center gap-3 text-muted small position-relative">
                 <span class="badge bg-success">DB: SQLite (WAL Active)</span>
                 <span>Self-Provisioned</span>
+
+                <button class="btn btn-sm btn-outline-secondary position-relative" @onclick="ToggleFeed"
+                        title="Recent warnings &amp; errors">
+                    <i class="bi bi-bell"></i>
+                    @if (ErrorFeed.UnreadCount > 0)
+                    {
+                        <span class="badge rounded-pill bg-danger position-absolute top-0 start-100 translate-middle">
+                            @(ErrorFeed.UnreadCount > 99 ? "99+" : ErrorFeed.UnreadCount.ToString())
+                        </span>
+                    }
+                </button>
+
+                @if (_feedOpen)
+                {
+                    <div class="feed-panel shadow-lg text-start">
+                        <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                            <strong class="small">Recent warnings &amp; errors</strong>
+                            <button class="btn btn-link btn-sm p-0" @onclick="MarkRead">mark all read</button>
+                        </div>
+                        @if (ErrorFeed.Recent.Count == 0)
+                        {
+                            <p class="text-muted small p-3 mb-0">Nothing logged yet.</p>
+                        }
+                        else
+                        {
+                            <ul class="list-unstyled m-0">
+                                @foreach (var entry in ErrorFeed.Recent)
+                                {
+                                    <li class="feed-entry px-3 py-2 border-bottom">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span class="badge @(entry.Level >= LogLevel.Error ? "bg-danger" : "bg-warning text-dark")">
+                                                @entry.Level
+                                            </span>
+                                            <span class="text-muted small">@entry.TimestampUtc.ToString("HH:mm:ss")</span>
+                                        </div>
+                                        <div class="small text-muted">@entry.Category</div>
+                                        <div class="small text-break">@entry.Message</div>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                }
             </div>
         </div>
 
@@ -28,3 +74,28 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private bool _feedOpen;
+
+    protected override void OnInitialized()
+    {
+        ErrorFeed.EntryAdded += OnEntryAdded;
+    }
+
+    private void OnEntryAdded(ErrorFeedEntry entry) => _ = InvokeAsync(StateHasChanged);
+
+    private void ToggleFeed()
+    {
+        _feedOpen = !_feedOpen;
+        if (_feedOpen) ErrorFeed.MarkAllRead();
+    }
+
+    private void MarkRead() => ErrorFeed.MarkAllRead();
+
+    public ValueTask DisposeAsync()
+    {
+        ErrorFeed.EntryAdded -= OnEntryAdded;
+        return ValueTask.CompletedTask;
+    }
+}

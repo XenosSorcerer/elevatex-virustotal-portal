@@ -2,9 +2,33 @@ using ElevateX.Core.Data;
 using ElevateX.Core.Models;
 using ElevateX.Core.Services;
 using ElevateX.Portal.Components;
+using ElevateX.Portal.Logging;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Structured logging (Serilog) + in-app error notification feed (FR-12). The error feed is a plain
+// ILoggerProvider, not a Serilog sink, so it keeps working regardless of the logging backend;
+// writeToProviders:true is required for it (and the console) to actually receive log calls once
+// Serilog owns the ILoggerFactory.
+var errorFeed = new ErrorFeedService();
+builder.Services.AddSingleton<IErrorFeedService>(errorFeed);
+
+// Drop the default console/debug providers so Serilog's own sinks below are the only console
+// output; the error feed remains as the sole Microsoft.Extensions.Logging provider, still reached
+// via writeToProviders below.
+builder.Logging.ClearProviders();
+builder.Logging.AddProvider(new ErrorFeedLoggerProvider(errorFeed));
+
+builder.Host.UseSerilog((_, configuration) => configuration
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File("logs/elevatex-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14),
+    writeToProviders: true);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

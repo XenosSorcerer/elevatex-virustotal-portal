@@ -76,6 +76,23 @@ main {
     }
 }
 
+.feed-panel {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    width: 340px;
+    max-height: 400px;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 0.375rem;
+    z-index: 1060;
+}
+
+.feed-entry:last-child {
+    border-bottom: none !important;
+}
+
 #blazor-error-ui {
     color-scheme: light only;
     background: lightyellow;
