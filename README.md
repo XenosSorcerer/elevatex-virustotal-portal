@@ -61,11 +61,11 @@ Other tunables live in the same `VirusTotal` config section (`RateLimitRequestsP
 dotnet test tests/ElevateX.Tests/ElevateX.Tests.csproj
 ```
 
-24 tests, fully offline, no API key required, finishes in well under 15 seconds (the single
+27 tests, fully offline, no API key required, finishes in well under 15 seconds (the single
 `WebApplicationFactory` integration test accounts for most of that). Covers the rate limiter,
-the retry/transient-failure classification, the scan state machine, SHA-256 deduplication, and
-one end-to-end upload → pipeline → completed flow. See `DECISIONS.md` for what was deliberately
-left untested and why.
+the retry/transient-failure classification, the scan state machine, SHA-256 deduplication, the
+`ScanHub` broadcast bridge, and one end-to-end upload → pipeline → completed flow. See
+`DECISIONS.md` for what was deliberately left untested and why.
 
 ## What's in the app
 
@@ -89,8 +89,11 @@ A notification bell in the header (every page) surfaces recent warnings and erro
   quota guard that pauses dispatch at the 500/day cap.
 - **Bounded retries** on transient failures only (429/408/5xx/timeout), honouring `Retry-After`;
   everything else fails fast with a reason.
-- **Real-time push** — an in-process notifier, riding Blazor Server's own SignalR circuit, publishes
-  scan-status changes from a single `AppDbContext.SaveChangesAsync` override; no polling required.
+- **Real-time push, two channels** — an in-process notifier riding Blazor Server's own circuit
+  drives the live Submissions/Dashboard UI (no polling in normal operation; a slowed-down 25s
+  timer survives only as a resilience fallback), and a second, independent `/hubs/scan` SignalR
+  hub broadcasts the same events for any client outside that circuit — both fed from a single
+  `AppDbContext.SaveChangesAsync` override. See the header's "Live" badge.
 - **Structured logging** — Serilog (console + rolling daily file), plus a live in-app notification
   bell fed by a framework-agnostic error feed that captures warnings and errors as they happen.
 
@@ -102,7 +105,8 @@ Full rationale, rejected alternatives, scale honesty, and AI-usage notes are in
 ```
 src/ElevateX.Core/       domain entities, EF DbContext, VirusTotal client, scan pipeline,
                           background dispatcher, rate limiter, analytics, export
-src/ElevateX.Portal/     Blazor Server UI (Submit / Submissions / Dashboard)
+src/ElevateX.Portal/     Blazor Server UI (Submit / Submissions / Dashboard), Hubs/ScanHub
+                          (dedicated SignalR endpoint at /hubs/scan)
 tests/ElevateX.Tests/    Unit/ + Integration/ — see "Running the tests" above
 docs/                    the original assessment brief and this project's implementation plans
 ```

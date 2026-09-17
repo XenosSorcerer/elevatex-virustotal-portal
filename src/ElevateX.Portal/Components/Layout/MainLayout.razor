@@ -18,6 +18,11 @@
                 <span class="badge bg-success">DB: SQLite (WAL Active)</span>
                 <span>Self-Provisioned</span>
 
+                <span class="badge bg-light text-dark border" title="Dedicated SignalR hub at /hubs/scan (FR-12)">
+                    <span class="hub-dot off" id="scan-hub-dot"></span>
+                    <span id="scan-hub-status">Live: connecting&hellip;</span>
+                </span>
+
                 <button class="btn btn-sm btn-outline-secondary position-relative" @onclick="ToggleFeed"
                         title="Recent warnings &amp; errors">
                     <i class="bi bi-bell"></i>

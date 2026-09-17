@@ -10,6 +10,9 @@
     <link rel="stylesheet" href="@Assets["lib/bootstrap-icons/font/bootstrap-icons.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["ElevateX.Portal.styles.css"]" />
+    <!-- Vendored SignalR JS client (FR-12 dedicated hub) — loaded before Blazor startup so
+         window.signalR is defined when ElevateX.Portal.lib.module.js's afterStarted() runs. -->
+    <script src="@Assets["lib/signalr/dist/browser/signalr.min.js"]"></script>
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
     <HeadOutlet @rendermode="InteractiveServer" />

@@ -76,6 +76,32 @@ main {
     }
 }
 
+.hub-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.35rem;
+    background-color: #adb5bd;
+    transition: background-color 0.2s ease;
+}
+
+    .hub-dot.on {
+        background-color: #198754;
+    }
+
+    .hub-dot.warn {
+        background-color: #ffc107;
+    }
+
+    .hub-dot.off {
+        background-color: #adb5bd;
+    }
+
+    .hub-dot.pulse {
+        box-shadow: 0 0 0 4px rgba(25, 135, 84, 0.25);
+    }
+
 .feed-panel {
     position: absolute;
     top: 100%;

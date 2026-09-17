@@ -2,6 +2,7 @@ using ElevateX.Core.Data;
 using ElevateX.Core.Models;
 using ElevateX.Core.Services;
 using ElevateX.Portal.Components;
+using ElevateX.Portal.Hubs;
 using ElevateX.Portal.Logging;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -51,8 +52,14 @@ builder.Services.AddSingleton<IApiRateLimiter, ApiRateLimiter>();
 builder.Services.AddSingleton<IApiCallRecorder, ApiCallRecorder>();
 builder.Services.AddTransient<VirusTotalRateLimitHandler>();
 
-// In-process real-time push, riding Blazor Server's own SignalR circuit (FR-12)
+// In-process real-time push, riding Blazor Server's own SignalR circuit (FR-09)
 builder.Services.AddSingleton<IScanNotifier, ScanNotifier>();
+
+// Dedicated SignalR hub (FR-12 stand-out) — a second, independent broadcast channel on top of
+// the Blazor-circuit push above, so a client that never opens a Blazor circuit still gets live
+// scan-status events. See ScanHubBroadcaster and DECISIONS.md.
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<ScanHubBroadcaster>();
 
 // Typed VirusTotal client; every outbound call is paced + logged by the handler
 builder.Services.AddHttpClient<IVirusTotalClient, VirusTotalClient>()
@@ -87,6 +94,9 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// FR-12: dedicated SignalR hub for scan-status broadcasts (see ScanHubBroadcaster)
+app.MapHub<ScanHub>(ScanHub.Route);
 
 // FR-12: .xlsx export of submission data
 app.MapGet("/export/submissions.xlsx", async (IExportService export, CancellationToken ct) =>

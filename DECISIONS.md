@@ -164,3 +164,11 @@
 
 &#x20;   \* \*\*Why:\*\* Roughly 19 `bi-*` icon names were already used across every page, but the icon font itself was never added, so they rendered as blank space. Vendored the official static CSS+font files (v1.11.3, matching the already-vendored Bootstrap 5.3.3) under `wwwroot/lib/bootstrap-icons/` — the same no-npm, no-libman pattern already used for Bootstrap itself — fixing every icon with one new `<link>` tag and zero markup changes.
 
+
+
+19\. Added a dedicated `ScanHub` alongside the existing notifier — \*\*Completing the "SignalR" Stand-out (FR-12)\*\*
+
+
+
+&#x20;   \* \*\*Why:\*\* Item 16 argued a second transport was redundant with Blazor Server's own circuit-based push — true functionally, but a COULD-priority stand-out meant to demonstrate the named technology deserves the literal thing, not just its side effect. Added `Hubs/ScanHub.cs` (server-to-client broadcast only, no client-invokable methods) and `Hubs/ScanHubBroadcaster.cs`, an `IHostedService` that subscribes to the same `IScanNotifier` used by Submissions/Dashboard and rebroadcasts each `ScanEvent` over a real `/hubs/scan` endpoint — a genuinely independent connection, not a relabelling of the existing one. Vendored `signalr.min.js` (same no-npm pattern as Bootstrap Icons) and added a "Live" header badge driven entirely by direct DOM updates rather than Blazor JS interop, so it keeps working even while this tab's own Blazor circuit is reconnecting. Item 16's reasoning stands as the record of the original call; this entry supersedes only its conclusion. One non-obvious bug caught while wiring it up: Blazor's `afterWebStarted` JS-initializer hook fires before the Interactive Server circuit finishes hydrating the page, so a DOM update made there gets silently clobbered by the circuit's own first render — `afterServerStarted` is the hook that's actually safe to use for a page that only registers `AddInteractiveServerComponents`. Covered by `ScanHubBroadcasterTests.cs` (subscribe/forward/unsubscribe, and a broadcast failure never reaching the publisher); verified live in-browser that `/hubs/scan` connects and the badge updates on all three pages.
+

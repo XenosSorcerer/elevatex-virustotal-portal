@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "elevatex-portal",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/ElevateX.Portal", "--urls", "http://localhost:5005"],
+      "port": 5005
+    }
+  ]
+}
